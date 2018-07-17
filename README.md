@@ -3,7 +3,7 @@
 ## Relation extraction on an open-domain knowledge base
 
 
-Accompanying repository for our **EMNLP 2017 paper** ([full paper](https://www.ukp.tu-darmstadt.de/fileadmin/user_upload/Group_UKP/publikationen/2017/2017_EMNLP_DS_relation_extraction_camera_ready.pdf)). It contains the code to replicate the experiments and the pre-trained models for sentence-level relation extraction.
+Accompanying repository for our **EMNLP 2017 paper** ([full paper](http://aclweb.org/anthology/D17-1188)). It contains the code to replicate the experiments and the pre-trained models for sentence-level relation extraction.
 
 > This repository contains experimental software and is published for the sole purpose of giving additional background details on the respective publication.
  
@@ -28,13 +28,13 @@ We combine the context representations with an attention mechanism to make the f
 Please, refer to the paper for more details.
 
 The dataset described in the paper can be found here:
- * https://www.ukp.tu-darmstadt.de/data/lexical-resources/wikipedia-wikidata-relations/
- 
+ * https://www.informatik.tu-darmstadt.de/ukp/research_6/data/lexical_resources/wikipedia_wikidata_relations/
+
  
 ### Contacts:
 If you have any questions regarding the code, please, don't hesitate to contact the authors or report an issue.
   * Daniil Sorokin, lastname@ukp.informatik.tu-darmstadt.de
-  * https://www.ukp.tu-darmstadt.de
+  * https://www.informatik.tu-darmstadt.de/ukp/
   * https://www.tu-darmstadt.de
   
 ### Demo:
@@ -46,26 +46,26 @@ http://semanticparsing.ukp.informatik.tu-darmstadt.de:5000/relation-extraction/
 ### Project structure:
 ```
 relation_extraction/
-├── apply-model.py
 ├── eval.py
 ├── model-train-and-test.py
 ├── notebooks
 ├── optimization_space.py
-├── parsing
+├── core
 │   ├── parser.py
+│   ├── embeddings.py
+│   ├── entity_extraction.py
 │   └── keras_models.py
 ├── relextserver
 │   └── server.py
-├── semanticgraph
+├── graph
 │   ├── graph_utils.py
 │   ├── io.py
 │   └── vis_utils.py
 ├── stanford_tag_dataset.py
-└── utils
-    ├── embedding_utils.py
-    ├── evaluation_utils.py
-    └── graph.py
+└── evaluation
+    └── metrics.py
 resources/
+├── properties-with-labels.txt
 └── property_blacklist.txt
 ```
 
@@ -77,16 +77,16 @@ resources/
         <td>relation_extraction/</td><td>Main Python module</td>
     </tr>
     <tr>
-        <td>relation_extraction/parsing</td><td>Models for joint relation extraction</td>
+        <td>relation_extraction/core</td><td>Models for joint relation extraction</td>
     </tr>
     <tr>
         <td>relation_extraction/relextserver</td><td>The code for the web demo.</td>
     </tr>
     <tr>
-        <td>relation_extraction/semanticgraph</td><td>IO and processing for relation graphs</td>
+        <td>relation_extraction/graph</td><td>IO and processing for relation graphs</td>
     </tr>
     <tr>
-        <td>relation_extraction/utils</td><td>IO and evaluation utils</td>
+        <td>relation_extraction/evaluation</td><td>Evaluation metrics</td>
     </tr>
     <tr>
         <td>resources/</td><td>Necessary resources</td>
@@ -105,44 +105,51 @@ resources/
 pip3 install -r requirements.txt
 ```
 
-3. Set the Keras (deep learning library) backend to Theano (even deeper deep learning library) with the following command:
+3. Set the Keras (deep learning library) backend to TensorFlow  with the following command:
 ```
-export KERAS_BACKEND=theano
+export KERAS_BACKEND=tensorflow
 ```
-   You can also permanently change Keras backend (read more: https://keras.io/backend/).
+   You can also permanently change Keras backend (read more: https://keras.io/backend/). 
+   Note that in order to reproduce the experiments in the paper you have to use Theano as a backend instead.
 
-4. Download the [data](https://www.ukp.tu-darmstadt.de/data/lexical-resources/wikipedia-wikidata-relations/), if you want to replicate the experiments from the paper.
-Extract the archive inside `emnlp2017-relation-extraction/data/wikipedia-wikidata/`.
+4. Download the [data](https://www.informatik.tu-darmstadt.de/ukp/research_6/data/lexical_resources/wikipedia_wikidata_relations/), if you want to replicate the experiments from the paper.
+Extract the archive inside `emnlp2017-relation-extraction/data/wikipedia-wikidata/`. The data was preprocessed using Stanford Core NLP 3.7.0 models. See `stanford_tag_dataset.py` for more information.
 
 5. Download the [GloVe embeddings, glove.6B.zip](https://nlp.stanford.edu/projects/glove/)
-and put them into the folder `emnlp2017-relation-extraction/resources/glove/`.
+and put them into the folder `emnlp2017-relation-extraction/resources/glove/`. You can change the path to word embeddings in the `model_params.json` file if needed.
 
-6. Set the Theano flags:
-```
- export THEANO_FLAGS=mode=FAST_RUN,device=cpu,floatX=float32
-```
+### Pre-trained models:
+* You can download the models that were used in the experiments [here](https://fileserver.ukp.informatik.tu-darmstadt.de/emnlp2017-relation-extraction/EMNLP2017_DS_IG_relation_extraction_trained_models.zip)
+* See `Using pre-trained models.ipynb` for a detailed example on how to use the pre-trained models in your code
 
 #### Reproducing the experiments from the paper
+To reproduce the experiments please refer to the version of the code that was published with the paper:
+[tag emnlp17](https://github.com/UKPLab/emnlp2017-relation-extraction/tree/emnlp17)
+
+In any other case, we recommend using the most recent version.
 
 1. Complete the setup above 
 
-2. Run `python model-train-and-test.py` in `emnlp2017-relation-extraction/relation_extraction/` to see the list of parameters
+2. Run `python model_train.py` in `emnlp2017-relation-extraction/relation_extraction/` to see the list of parameters
 
-3. If you put the data into teh default folders you can train the `ContextWeighted` model with the following command:
+3. If you put the data into the default folders you can train the `ContextWeighted` model with the following command:
 ```
-python model-train-and-test.py model_ContextWeighted --mode train-test
+python model_train.py model_ContextWeighted train ../data/wikipedia-wikidata/enwiki-20160501/semantic-graphs-filtered-training.02_06.json ../data/wikipedia-wikidata/enwiki-20160501/semantic-graphs-filtered-validation.02_06.json
+```
+
+4. Run the following command to compute the precision-recall curves:
+```
+python precision_recall_curves.py model_ContextWeighted ../data/wikipedia-wikidata/enwiki-20160501/semantic-graphs-filtered-held-out.02_06.json
 ```
 
 #### Notes
 
 - The web demo code is provided for information only. It is not meant to be run elsewhere.
 
-### Pre-trained models:
-* You can download the models that were used in the experiments [here](https://www.ukp.tu-darmstadt.de/fileadmin/user_upload/Group_UKP/data/wikipediaWikidata/EMNLP2017_DS_IG_relation_extraction_trained_models.zip)
-* We will soon make available updated models and will publish usage instructions
-
 #### Requirements:
 * Python 3.4
+* Keras 2.1.5
+* TensorFlow 1.6.0
 * See requirements.txt for library requirements. 
 
 ### License:

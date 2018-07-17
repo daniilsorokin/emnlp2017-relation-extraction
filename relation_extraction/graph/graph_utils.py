@@ -11,6 +11,8 @@ kbid_numerical = "_NUMERICAL"
 kbid_date = "_DATE"
 kbid_empty = "_EMPTY"
 
+LEGACY_MODE = True
+
 
 def vertex_by_token_position(graph, token_positions):
     """
@@ -60,39 +62,6 @@ def get_vertex_kbid(vertex):
     return vertex['kbID']
 
 
-def generate_negative_edges(graph):
-    """
-    Generate all edges that doesn't exist in the graph with dummy KbIds.
-
-    :param graph: input graph
-    :return: list of all edges that doesn't exist in the graph
-
-    >>> g = {'edgeSet': [{'right': [26, 27], 'left': [18, 19, 20], 'kbID': 'P161'}, \
-    {'right': [23, 24], 'left': [18, 19, 20], 'kbID': 'P161'}], \
-    'vertexSet': [{'tokenpositions': [15], 'kbID': '1982-01-01', 'lexicalInput': '1982-01-01', 'type': 'DATE'}, \
-    {'tokenpositions': [18, 19, 20], 'kbID': 'Q7763552', 'lexicalInput': 'The Shadow Riders', 'type': 'LEXICAL', }, \
-    {'tokenpositions': [23, 24], 'kbID': 'Q213706', 'lexicalInput': 'Tom Selleck'}, \
-    {'tokenpositions': [26, 27], 'kbID': 'Q311314', 'lexicalInput': 'Sam Elliott'}]}
-    >>> n_edges = [{'right': [18, 19, 20], 'left': [15], 'kbID': '_EMPTY'},  \
-    {'right': [23, 24], 'left': [15], 'kbID': '_EMPTY'}, {'right': [26, 27], 'left': [15], 'kbID': '_EMPTY'}, \
-    {'right': [15], 'left': [18, 19, 20], 'kbID': '_EMPTY'}, {'right': [15], 'left': [23, 24], 'kbID': '_EMPTY'}, \
-    {'right': [26, 27], 'left': [23, 24], 'kbID': '_EMPTY'}, {'right': [15], 'left': [26, 27], 'kbID': '_EMPTY'}, \
-    {'right': [23, 24], 'left': [26, 27], 'kbID': '_EMPTY'}]
-    >>> generate_negative_edges(g) in n_edges
-    True
-
-    """
-
-    num_edges = len(graph["vertexSet"])
-    if num_edges <= 2:
-        return None
-    for x, y in [(x, y) for x in range(num_edges) for y in range(num_edges) if x is not y]:
-        left = graph["vertexSet"][x]["tokenpositions"]
-        right = graph["vertexSet"][y]["tokenpositions"]
-        if all(not all(tIndex in edge["left"] + edge["right"] for tIndex in left + right) for edge in graph["edgeSet"]):
-            return {'kbID': kbid_empty, 'left': left, 'right': right}
-
-
 def edge_to_kb_ids(edge, g):
     """
     Convert the given edge from the given graph to a triple of KbIds.
@@ -110,7 +79,21 @@ def edge_to_kb_ids(edge, g):
     return left_kbid, property_kbid, right_kbid
 
 
-def get_entity_indexed_vector(tokens, edge, mode="mark"):
+def get_sentence_boundaries(tokens, edge):
+    sent_left_border = len(tokens)
+    sent_right_border = len(tokens)
+    if edge["left"] + edge["right"]:
+        entities_left = min(edge["left"] + edge["right"])
+        entities_right = max(edge["left"] + edge["right"])
+        if 0 < entities_left < len(tokens):
+            sent_left_border = max(i for i in range(entities_left) if tokens[i] == '.' or i == 0)
+        if 0 < entities_right < len(tokens):
+            sent_right_border = min(i for i in range(entities_right, len(tokens))
+                                    if tokens[i] == '.' or i == len(tokens) - 1)
+    return sent_left_border, sent_right_border
+
+
+def get_entity_indexed_vector(tokens, edge, mode="mark-bi"):
     """
     Incorporates the current edge right and left entities into the sentence index representation.
     Default mode: Each token that belongs to an entities is augmented with an 2 marker, the rest of the
@@ -121,11 +104,17 @@ def get_entity_indexed_vector(tokens, edge, mode="mark"):
     :param edge: edge from a graph
     :param mode: incorporation mode: {"mark","position","bio","mark-bi", "bio-bi"}
     :return: list of tuples where the second values is a binary variable indicating entities
+    >>> get_entity_indexed_vector(["The", "MIT", "ATIS", "System", ".", "This", "paper", "describes", "the", "status", "."], {"left": [6], "right": [9]})
+    [('The', 4), ('MIT', 4), ('ATIS', 4), ('System', 4), ('.', 4), ('This', 1), ('paper', 2), ('describes', 1), ('the', 1), ('status', 3), ('.', 1)]
     """
+    sent_left_border, sent_right_border = get_sentence_boundaries(tokens, edge)
     if mode == "mark":
-        return [(t, 2) if i in edge["left"] + edge["right"] else (t, 1) for i, t in enumerate(tokens)]
+        return [(t, 2) if i in edge["left"] + edge["right"]
+                else (t, 1) if sent_left_border <= i <= sent_right_border else (t, 3 if not LEGACY_MODE else 1) for i, t in enumerate(tokens)]
     if mode == "mark-bi":
-        return [(t, 2) if i in edge["left"] else (t, 3) if i in edge["right"] else (t, 1) for i, t in enumerate(tokens)]
+        return [(t, 2) if i in edge["left"]
+                else (t, 3) if i in edge["right"]
+                else (t, 1) if sent_left_border <= i <= sent_right_border else (t, 4 if not LEGACY_MODE else 1) for i, t in enumerate(tokens)]
     if mode == "bio":
         b_tokens = edge["left"][:1] + edge["right"][:1]
         i_tokens = edge["left"][1:] + edge["right"][1:]
@@ -164,17 +153,6 @@ def token_to_entity_distance(entity_token_positions, token_position):
     if len(entity_token_positions) < 1:
         entity_token_positions = np.asarray([-1])
     return (token_position - np.asarray(entity_token_positions))[np.abs(token_position - np.asarray(entity_token_positions)).argmin()]
-
-
-def print_graph(g):
-    """
-    Print out the graph tokens and the edges.
-
-    :param g:  input graph
-    """
-    print(" ".join(g['tokens']))
-    for edge in g['edgeSet']:
-        print_edge(edge, g)
 
 
 def edge_to_str(edge, g):
